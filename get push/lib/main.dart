@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'model/post.dart';
-import 'repository/post_repository.dart';
+import 'model/weather.dart';
+import 'repository/weather_repository.dart';
 
 void main() {
   runApp(const MyApp());
@@ -12,42 +12,46 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter HTTP Demo',
+      title: 'Weather App',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(),
+      home: const WeatherHomePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({Key? key}) : super(key: key);
+class WeatherHomePage extends StatefulWidget {
+  const WeatherHomePage({Key? key}) : super(key: key);
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<WeatherHomePage> createState() => _WeatherHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  final PostRepository repository = PostRepository();
-  List<Post> posts = [];
+class _WeatherHomePageState extends State<WeatherHomePage> {
+  final WeatherRepository repository = WeatherRepository();
+  List<Weather> weatherList = [];
   bool isLoading = false;
+  final TextEditingController cityController = TextEditingController();
+
+  // Pre-defined cities to fetch on load
+  final List<String> defaultCities = ['London', 'Lagos', 'New York', 'Tokyo', 'Paris'];
 
   @override
   void initState() {
     super.initState();
-    fetchPosts();
+    fetchMultipleWeathers();
   }
 
-  Future<void> fetchPosts() async {
+  Future<void> fetchMultipleWeathers() async {
     setState(() {
       isLoading = true;
     });
 
     try {
-      final fetchedPosts = await repository.fetchPosts();
+      final weathers = await repository.fetchWeatherForMultipleCities(defaultCities);
       setState(() {
-        posts = fetchedPosts;
+        weatherList = weathers;
         isLoading = false;
       });
     } catch (e) {
@@ -62,28 +66,27 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  Future<void> createPost() async {
-    final newPost = Post(
-      id: 0,
-      userId: 1,
-      title: 'New Post Title',
-      body: 'This is the body of the new post',
-    );
+  Future<void> searchWeather() async {
+    if (cityController.text.isEmpty) return;
+
+    setState(() {
+      isLoading = true;
+    });
 
     try {
-      final createdPost = await repository.createPost(newPost);
+      final weather = await repository.fetchWeather(cityController.text);
       setState(() {
-        posts.insert(0, createdPost);
+        weatherList.insert(0, weather);
+        isLoading = false;
+      });
+      cityController.clear();
+    } catch (e) {
+      setState(() {
+        isLoading = false;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Post created successfully!')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating post: $e')),
+          SnackBar(content: Text('City not found or error: $e')),
         );
       }
     }
@@ -93,49 +96,92 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Flutter GET & POST Request'),
+        title: const Text('Weather App'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: fetchPosts,
+            onPressed: fetchMultipleWeathers,
           ),
         ],
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : posts.isEmpty
-              ? const Center(child: Text('No posts found'))
-              : ListView.builder(
-                  itemCount: posts.length,
-                  itemBuilder: (context, index) {
-                    final post = posts[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          child: Text('${post.id}'),
-                        ),
-                        title: Text(
-                          post.title,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          post.body,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    );
-                  },
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: cityController,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter city name',
+                      border: OutlineInputBorder(),
+                    ),
+                    onSubmitted: (_) => searchWeather(),
+                  ),
                 ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: createPost,
-        tooltip: 'Create Post',
-        child: const Icon(Icons.add),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: searchWeather,
+                  child: const Icon(Icons.search),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : weatherList.isEmpty
+                    ? const Center(child: Text('No weather data'))
+                    : ListView.builder(
+                        itemCount: weatherList.length,
+                        itemBuilder: (context, index) {
+                          final weather = weatherList[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            child: ListTile(
+                              leading: Image.network(
+                                'https://openweathermap.org/img/wn/${weather.icon}@2x.png',
+                                width: 50,
+                                height: 50,
+                              ),
+                              title: Text(
+                                weather.cityName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${weather.temperature.toStringAsFixed(1)}°C - ${weather.description}',
+                                  ),
+                                  Text(
+                                    'Feels like: ${weather.feelsLike.toStringAsFixed(1)}°C',
+                                  ),
+                                  Text(
+                                    'Humidity: ${weather.humidity}% | Wind: ${weather.windSpeed} m/s',
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    cityController.dispose();
+    super.dispose();
   }
 }
