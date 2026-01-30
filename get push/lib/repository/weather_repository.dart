@@ -1,34 +1,32 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../model/weather.dart';
+import '../model/post.dart';
 
-class WeatherRepository {
-  final String baseUrl = "https://api.openweathermap.org/data/2.5";
-  final String apiKey = "dac413a5a5a6bc2267ff4b539a00608c"; 
-  Future<Weather> fetchWeather(String city) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/weather?q=$city&appid=$apiKey&units=metric'),
-    );
+class PostRepository {
+  final String baseUrl = "https://jsonplaceholder.typicode.com";
+
+  Future<List<Post>> fetchPosts() async {
+    final response = await http.get(Uri.parse('$baseUrl/posts'));
 
     if (response.statusCode == 200) {
-      return Weather.fromJson(jsonDecode(response.body));
+      List<dynamic> body = jsonDecode(response.body);
+      return body.map((dynamic item) => Post.fromJson(item)).toList();
     } else {
-      throw Exception("Failed to load weather data");
+      throw Exception("Failed to load posts");
     }
   }
 
-  Future<List<Weather>> fetchWeatherForMultipleCities(List<String> cities) async {
-    List<Weather> weatherList = [];
-    
-    for (String city in cities) {
-      try {
-        final weather = await fetchWeather(city);
-        weatherList.add(weather);
-      } catch (e) {
-        print("Error fetching weather for $city: $e");
-      }
+  Future<Post> createPost(Post post) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/posts'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(post.toJson()),
+    );
+
+    if (response.statusCode == 201) {
+      return Post.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception("Failed to create post");
     }
-    
-    return weatherList;
   }
 }
